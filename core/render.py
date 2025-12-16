@@ -1,94 +1,79 @@
 from __future__ import annotations
 
-from typing import List, Dict, Tuple
+import subprocess
 from pathlib import Path
-
-# MoviePy 1.0.3 style imports
-from moviepy.editor import (
-    ImageClip,
-    AudioFileClip,
-    CompositeVideoClip,
-    ColorClip,
-)
+from typing import Dict, List, Tuple
 
 
-def render_video(
+def render_video_ffmpeg(
     audio_path: str,
     storyboard: List[Dict],
-    background_path: str | None,
+    background_path: str,
     output_path: str,
     resolution: Tuple[int, int] = (1280, 720),
     fps: int = 30,
 ) -> str:
     """
-    Given an audio file + storyboard, render an MP4 video.
+    Render MP4 using ffmpeg only:
+    - background image looped
+    - overlays PNGs at specified times
+    - adds audio
     """
-    output_path = str(output_path)
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-
-    audio_clip = AudioFileClip(audio_path)
-    audio_duration = float(audio_clip.duration or 0)
-
-    if storyboard:
-        last_event_time = max(float(e["t"]) + float(e.get("duration", 1.0)) for e in storyboard)
-        total_duration = max(audio_duration, last_event_time + 0.5)
-    else:
-        total_duration = max(audio_duration, 1.0)
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
 
     w, h = resolution
 
-    # Background: if missing, use a solid color
-    bg_clip = _make_background_clip(background_path, total_duration, resolution)
+    # Inputs: bg + audio + each overlay PNG
+    cmd = ["ffmpeg", "-y"]
 
-    clips = [bg_clip]
+    # Background as a looped image
+    cmd += ["-loop", "1", "-i", background_path]
 
-    for event in storyboard:
-        asset_path = event["asset"]
-        start_t = float(event["t"])
-        duration = float(event.get("duration", 1.0))
+    # Audio
+    cmd += ["-i", audio_path]
 
-        if not Path(asset_path).exists():
-            raise FileNotFoundError(f"Asset missing: {asset_path}")
+    # Overlay images
+    for e in storyboard:
+        cmd += ["-i", e["asset"]]
 
-        img_clip = (
-            ImageClip(asset_path)
-            .set_start(start_t)
-            .set_duration(duration)
-            .resize(width=int(w * 0.55))
-            .set_position("center")
-            .fadein(0.12)
+    # Build filter graph
+    # Start with background scaled
+    filter_lines = [f"[0:v]scale={w}:{h},fps={fps}[base];"]
+    last = "[base]"
+
+    # Each overlay: enable between t and t+duration
+    # Inputs: bg=0, audio=1, overlays start at index 2
+    for idx, e in enumerate(storyboard):
+        t = float(e["t"])
+        d = float(e.get("duration", 1.2))
+        overlay_in = f"[{idx+2}:v]"
+        out_label = f"[v{idx}]"
+
+        # Scale overlay to width ~55% of frame
+        filter_lines.append(
+            f"{overlay_in}scale=iw*0.55:-1[ol{idx}];"
         )
+        filter_lines.append(
+            f"{last}[ol{idx}]overlay=(W-w)/2:(H-h)/2:enable='between(t,{t:.3f},{(t+d):.3f})'{out_label};"
+        )
+        last = out_label
 
-        clips.append(img_clip)
+    filter_complex = "".join(filter_lines).rstrip(";")
 
-    video = CompositeVideoClip(clips, size=resolution).set_duration(total_duration).set_audio(audio_clip)
+    cmd += ["-filter_complex", filter_complex]
 
-    video.write_videofile(
-        output_path,
-        fps=fps,
-        codec="libx264",
-        audio_codec="aac",
-        threads=2,
-        verbose=False,
-        logger=None,
-    )
+    # Map video + audio
+    cmd += ["-map", last, "-map", "1:a"]
 
-    audio_clip.close()
-    video.close()
+    # Output encoding
+    cmd += [
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-shortest",
+        str(out),
+    ]
 
-    return output_path
-
-
-def _make_background_clip(background_path: str | None, duration: float, resolution: Tuple[int, int]):
-    w, h = resolution
-
-    if background_path:
-        p = Path(background_path)
-        if p.exists():
-            try:
-                return ImageClip(str(p)).set_duration(duration).resize(newsize=resolution)
-            except Exception:
-                pass
-
-    # fallback
-    return ColorClip(size=(w, h), color=(20, 20, 80)).set_duration(duration)
+    subprocess.run(cmd, check=True)
+    return str(out)
