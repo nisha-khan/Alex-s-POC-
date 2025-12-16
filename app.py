@@ -8,67 +8,95 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.audio import load_audio_from_upload, get_onset_times
-from core.storyboard import build_storyboard, DEFAULT_LABELS
-from core.visuals import ensure_background
-from core.render import render_video_ffmpeg
+from core.songs import get_templates, get_template_by_key
+from core.storyboard import build_storyboard_for_template
+from core.render import render_video_ffmpeg_drawtext
 
 BASE_DIR = ROOT
 OUTPUTS_DIR = BASE_DIR / "outputs"
 OUTPUTS_DIR.mkdir(exist_ok=True, parents=True)
 
-ASSETS_DIR = OUTPUTS_DIR / "generated_assets" / "alphabet"
-BG_PATH = OUTPUTS_DIR / "generated_assets" / "backgrounds" / "bg_default.png"
+DURATION_SEC = 180
+TARGET_EVENTS = 72  # ~one screen change every 2.5 sec
+
 
 st.set_page_config(page_title="Lothgha Visual-AI POC", layout="centered")
 
 
 def main():
-    st.title("Lothgha Visual-AI POC")
-    st.write("Upload a short ABC / nursery rhyme clip. This will generate a simple video synced to audio.")
+    st.title("Lothgha Visual-AI POC (3 Demo Songs)")
+    st.write(
+        "Upload an audio clip for your demo. The app will loop it to 3 minutes and generate "
+        "a synchronized educational video using one of three built-in song templates:\n"
+        "- ABCs\n- Numbers\n- Colors"
+    )
 
-    audio_file = st.file_uploader("Upload audio (WAV/MP3/M4A, < 60s recommended)", type=["wav", "mp3", "m4a"])
-    st.selectbox("Visual theme", options=["Alphabet Animals (A, B, C)"], index=0)
+    templates = get_templates(target_events=TARGET_EVENTS)
+    template_labels = {t.title: t.key for t in templates}
+
+    audio_file = st.file_uploader(
+        "Upload audio (WAV/MP3/M4A). For POC you can upload a short clip; it will loop to 3 minutes.",
+        type=["wav", "mp3", "m4a"],
+    )
+
+    choice_title = st.selectbox("Choose a demo song template", options=list(template_labels.keys()))
+    choice_key = template_labels[choice_title]
+
+    make_all = st.checkbox("Generate ALL 3 demo videos (ABC + Numbers + Colors)", value=False)
 
     if st.button("Generate video"):
         if not audio_file:
-            st.error("Upload an audio file first.")
+            st.error("Please upload an audio file first.")
             return
 
-        bg = ensure_background(BG_PATH)
+        # Save uploaded audio to outputs/
+        audio_path = OUTPUTS_DIR / f"tmp_{audio_file.name}"
+        audio_path.write_bytes(audio_file.getbuffer())
 
-        with st.spinner("Loading audio..."):
-            y, sr, tmp_audio_path = load_audio_from_upload(audio_file, OUTPUTS_DIR)
+        if make_all:
+            keys = ["abc", "numbers", "colors"]
+        else:
+            keys = [choice_key]
 
-        with st.spinner("Detecting timing points..."):
-            onset_times = get_onset_times(y, sr, max_events=len(DEFAULT_LABELS), min_gap=0.55)
+        for k in keys:
+            template = get_template_by_key(k, target_events=TARGET_EVENTS)
 
-        st.success(f"Detected {len(onset_times)} key timing points.")
-        storyboard = build_storyboard(onset_times, DEFAULT_LABELS, ASSETS_DIR)
-
-        st.subheader("Storyboard preview")
-        st.json(storyboard)
-
-        with st.spinner("Rendering with ffmpeg..."):
-            output_filename = f"lothgha_demo_{uuid.uuid4().hex[:8]}.mp4"
-            out_path = OUTPUTS_DIR / output_filename
-            try:
-                final_path = render_video_ffmpeg(
-                    audio_path=str(tmp_audio_path),
-                    storyboard=storyboard,
-                    background_path=bg,
-                    output_path=str(out_path),
+            with st.spinner(f"Building storyboard for {template.title}..."):
+                events = build_storyboard_for_template(
+                    tokens=template.tokens,
+                    duration_sec=DURATION_SEC,
+                    token_colors=template.token_colors,
                 )
-            except Exception as e:
-                st.error(f"Render failed: {e}")
-                return
 
-        st.success("Video generated!")
-        video_bytes = Path(final_path).read_bytes()
-        st.video(video_bytes)
-        st.download_button("Download video", data=video_bytes, file_name=output_filename, mime="video/mp4")
+            with st.spinner(f"Rendering {template.title} (3 minutes)..."):
+                out_name = f"{k}_demo_{uuid.uuid4().hex[:8]}.mp4"
+                out_path = OUTPUTS_DIR / out_name
+
+                try:
+                    final_path = render_video_ffmpeg_drawtext(
+                        audio_path=str(audio_path),
+                        events=events,
+                        output_path=str(out_path),
+                        duration_sec=DURATION_SEC,
+                        resolution=(1280, 720),
+                        fps=30,
+                    )
+                except Exception as e:
+                    st.error(f"Render failed for {template.title}: {e}")
+                    return
+
+            st.success(f"Generated: {template.title}")
+            video_bytes = Path(final_path).read_bytes()
+            st.video(video_bytes)
+            st.download_button(
+                label=f"Download {template.title}",
+                data=video_bytes,
+                file_name=out_name,
+                mime="video/mp4",
+            )
+
+    st.caption("POC: template-driven (ABC, Numbers, Colors), 3 minutes each, ffmpeg-only rendering for reliability.")
 
 
 if __name__ == "__main__":
     main()
-
