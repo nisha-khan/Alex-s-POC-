@@ -1,29 +1,48 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Dict, List
-
-from core.visuals import ensure_visual_assets
-
-DEFAULT_LABELS = ["A", "B", "C"]
+from dataclasses import dataclass
+from typing import List, Optional
 
 
-def build_storyboard(onset_times: List[float], labels: List[str], assets_dir: Path) -> List[Dict]:
-    assets = ensure_visual_assets(assets_dir)
+@dataclass
+class StoryEvent:
+    t_start: float
+    t_end: float
+    text: str
+    # Optional swatch (for Colors)
+    swatch_hex: Optional[str] = None
 
-    n = min(len(onset_times), len(labels))
-    events: List[Dict] = []
-    for i in range(n):
-        label = labels[i]
-        if label not in assets:
-            continue
+
+def build_storyboard_for_template(
+    tokens: List[str],
+    duration_sec: int = 180,
+    token_colors: Optional[List[str]] = None,
+) -> List[StoryEvent]:
+    """
+    Builds evenly spaced events across duration_sec.
+    tokens length determines how many events occur.
+    """
+    if not tokens:
+        return []
+
+    n = len(tokens)
+    step = duration_sec / float(n)
+
+    events: List[StoryEvent] = []
+    for i, tok in enumerate(tokens):
+        start = i * step
+        end = (i + 1) * step
+
+        swatch = None
+        if token_colors and i < len(token_colors):
+            swatch = token_colors[i]
+
         events.append(
-            {
-                "t": float(onset_times[i]),
-                "label": label,
-                "asset": assets[label],  # absolute path
-                "duration": 1.2,
-                "effect": "pop",
-            }
+            StoryEvent(
+                t_start=start,
+                t_end=end,
+                text=str(tok),
+                swatch_hex=swatch,
+            )
         )
     return events
