@@ -1,5 +1,6 @@
 import sys
 import uuid
+import traceback
 from pathlib import Path
 
 import streamlit as st
@@ -13,9 +14,10 @@ from core.storyboard import build_storyboard_for_template
 from core.render import render_video_ffmpeg_drawtext
 
 import core.render as cr
+
+# Debug: verify which render file is actually loaded
 st.write("RENDER FILE:", cr.__file__)
 st.write("RENDER FUNC:", cr.render_video_ffmpeg_drawtext.__code__.co_filename)
-
 
 BASE_DIR = ROOT
 OUTPUTS_DIR = BASE_DIR / "outputs"
@@ -23,7 +25,6 @@ OUTPUTS_DIR.mkdir(exist_ok=True, parents=True)
 
 DURATION_SEC = 180
 TARGET_EVENTS = 72  # ~one screen change every 2.5 sec
-
 
 st.set_page_config(page_title="Lothgha Visual-AI POC", layout="centered")
 
@@ -59,7 +60,7 @@ def main():
         audio_path = OUTPUTS_DIR / f"audio_{uuid.uuid4().hex}{suffix}"
         audio_path.write_bytes(audio_file.getbuffer())
 
-        st.write("Saved audio path:", audio_path)
+        st.write("Saved audio path:", str(audio_path))
         st.write("Exists:", audio_path.exists())
 
         if make_all:
@@ -90,9 +91,22 @@ def main():
                         resolution=(1280, 720),
                         fps=30,
                     )
+
                 except Exception as e:
-                    st.error(f"Render failed for {template.title}: {e}")
-                    return
+                    # ✅ IMPORTANT: use st.code so Streamlit DOES NOT mangle '*' into nothing
+                    st.error("Render failed ❌")
+
+                    st.write("Template:", template.title)
+                    st.write("Output path:", str(out_path))
+
+                    # raw error text
+                    st.code(str(e), language="text")
+
+                    # full traceback
+                    st.code(traceback.format_exc(), language="text")
+
+                    # stop the app run cleanly
+                    st.stop()
 
             st.success(f"Generated: {template.title}")
             video_bytes = Path(final_path).read_bytes()
