@@ -15,7 +15,6 @@ from core.render import render_video_ffmpeg_drawtext
 
 import core.render as cr
 
-# Debug: verify which render file is actually loaded
 st.write("RENDER FILE:", cr.__file__)
 st.write("RENDER FUNC:", cr.render_video_ffmpeg_drawtext.__code__.co_filename)
 
@@ -24,7 +23,7 @@ OUTPUTS_DIR = BASE_DIR / "outputs"
 OUTPUTS_DIR.mkdir(exist_ok=True, parents=True)
 
 DURATION_SEC = 180
-TARGET_EVENTS = 72  # ~one screen change every 2.5 sec
+TARGET_EVENTS = 72
 
 st.set_page_config(page_title="Lothgha Visual-AI POC", layout="centered")
 
@@ -55,7 +54,6 @@ def main():
             st.error("Please upload an audio file first.")
             return
 
-        # Save uploaded audio to outputs/
         suffix = Path(audio_file.name).suffix
         audio_path = OUTPUTS_DIR / f"audio_{uuid.uuid4().hex}{suffix}"
         audio_path.write_bytes(audio_file.getbuffer())
@@ -63,10 +61,7 @@ def main():
         st.write("Saved audio path:", str(audio_path))
         st.write("Exists:", audio_path.exists())
 
-        if make_all:
-            keys = ["abc", "numbers", "colors"]
-        else:
-            keys = [choice_key]
+        keys = ["abc", "numbers", "colors"] if make_all else [choice_key]
 
         for k in keys:
             template = get_template_by_key(k, target_events=TARGET_EVENTS)
@@ -91,21 +86,15 @@ def main():
                         resolution=(1280, 720),
                         fps=30,
                     )
-
                 except Exception as e:
-                    # ✅ IMPORTANT: use st.code so Streamlit DOES NOT mangle '*' into nothing
                     st.error("Render failed ❌")
-
                     st.write("Template:", template.title)
                     st.write("Output path:", str(out_path))
 
-                    # raw error text
-                    st.code(str(e), language="text")
+                    # No syntax highlighter → avoids StreamlitSyntaxHighlighter JS crash
+                    st.text_area("Exception message", str(e), height=160)
+                    st.text_area("Full traceback", traceback.format_exc(), height=360)
 
-                    # full traceback
-                    st.code(traceback.format_exc(), language="text")
-
-                    # stop the app run cleanly
                     st.stop()
 
             st.success(f"Generated: {template.title}")
