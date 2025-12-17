@@ -112,6 +112,10 @@ def render_video_ffmpeg_drawtext(
         str(out),
     ]
 
+    print("FFMPEG FILTER:", filter_complex[:500])
+    print("FFMPEG CMD:", cmd[:10], "...", cmd[-5:])
+
+
     subprocess.run(cmd, check=True)
     return str(out)
 
