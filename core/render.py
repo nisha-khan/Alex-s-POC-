@@ -111,5 +111,13 @@ def render_video_ffmpeg_drawtext(
     print("\n========== FFMPEG STDOUT ==========\n", p.stdout)
     print("\n========== FFMPEG STDERR ==========\n", p.stderr)
 
-    p.check_returncode()
+    if p.returncode != 0:
+        raise RuntimeError(
+            "FFMPEG FAILED\n\n"
+            f"Return code: {p.returncode}\n\n"
+            f"STDERR:\n{p.stderr}\n\n"
+            f"STDOUT:\n{p.stdout}\n\n"
+            f"CMD:\n{' '.join(cmd)}\n"
+        )
+    
     return str(out)

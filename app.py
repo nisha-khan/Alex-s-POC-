@@ -88,8 +88,8 @@ def main():
                     )
                 except Exception as e:
                     st.error("Render failed ❌")
-                    st.write("Template:", template.title)
-                    st.write("Output path:", str(out_path))
+                    st.text_area("Full error (copy this)", str(e), height=350)
+                    st.stop()
 
                     # No syntax highlighter → avoids StreamlitSyntaxHighlighter JS crash
                     st.text_area("Exception message", str(e), height=160)
