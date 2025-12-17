@@ -69,8 +69,7 @@ def main():
             with st.spinner(f"Building storyboard for {template.title}..."):
                 events = build_storyboard_for_template(
                     tokens=template.tokens,
-                    duration_sec=DURATION_SEC,
-                    token_colors=template.token_colors,
+                    duration_sec=DURATION_SEC
                 )
 
             with st.spinner(f"Rendering {template.title} (3 minutes)..."):
