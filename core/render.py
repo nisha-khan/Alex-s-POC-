@@ -116,7 +116,11 @@ def render_video_ffmpeg_drawtext(
     print("FFMPEG CMD:", cmd[:10], "...", cmd[-5:])
 
 
-    subprocess.run(cmd, check=True)
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print("\n========== FFMPEG STDOUT ==========\n", p.stdout)
+    print("\n========== FFMPEG STDERR ==========\n", p.stderr)
+    p.check_returncode()
+
     return str(out)
 
 
