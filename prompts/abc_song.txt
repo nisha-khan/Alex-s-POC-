@@ -1,25 +1,26 @@
-A
-B
-C
-D
-E
-F
-G
-HELLO
-I
-J
-K
-L
-M
-N
-ORANGEP
-QQ
-RED
-S
-T
-U
-V
-W
-X
-YELLOWZ
-Z
+A is for Apple
+B is for Ball
+C is for Cat
+D is for Dog
+E is for Egg
+F is for Fish
+G is for Goat
+H is for Hat
+I is for Ice
+J is for Jar
+K is for Kite
+L is for Lion
+M is for Moon
+N is for Nose
+O is for Orange
+P is for Pig
+Q is for Queen
+R is for Rabbit
+S is for Sun
+T is for Tree
+U is for Umbrella
+V is for Violin
+W is for Whale
+X is for Xylophone
+Y is for Yacht
+Z is for Zebra

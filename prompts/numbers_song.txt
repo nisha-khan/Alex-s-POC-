@@ -1,7 +1,10 @@
-1
-2
-3
-4
-5
-6
-7
+1 Apple
+2 Balls
+3 Cats
+4 Dogs
+5 Eggs
+6 Fish
+7 Goats
+8 Hats
+9 Ice Cubes
+10 Kites
