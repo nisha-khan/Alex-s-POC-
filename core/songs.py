@@ -1,23 +1,22 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
-
-from core.prompt_parser import parse_prompt_lines
+from typing import List, Optional, Dict
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMPTS_DIR = ROOT / "prompts"
+ICONS_DIR = ROOT / "assets" / "icons"
 
 
 @dataclass(frozen=True)
 class SongTemplate:
     key: str
     title: str
-    tokens: List[str]
+    tokens: List[Dict]
     token_colors: Optional[List[str]] = None
 
 
-def _repeat_to_length(base: List[str], target_len: int) -> List[str]:
+def _repeat_to_length(base: List[Dict], target_len: int) -> List[Dict]:
     if not base or target_len <= 0:
         return []
     out = []
@@ -35,113 +34,37 @@ def _load_prompt_lines(filename: str) -> List[str]:
     return [l.strip() for l in path.read_text().splitlines() if l.strip()]
 
 
-# --- NEW: basic icon map (POC) ---
-ICON_MAP = {
-    "APPLE": "🍎",
-    "AIRPLANE": "✈️",
-    "BALL": "⚽",
-    "CAT": "🐱",
-    "DOG": "🐶",
-    "EGG": "🥚",
-    "FISH": "🐟",
-    "GOAT": "🐐",
-    "HAT": "🎩",
-    "ICE": "🧊",
-    "JAR": "🫙",
-    "KITE": "🪁",
-    "LION": "🦁",
-    "MOON": "🌙",
-    "NOSE": "👃",
-    "ORANGE": "🍊",
-    "PIG": "🐷",
-    "QUEEN": "👑",
-    "RABBIT": "🐰",
-    "SUN": "☀️",
-    "TREE": "🌳",
-    "UMBRELLA": "☂️",
-    "VIOLIN": "🎻",
-    "WHALE": "🐋",
-    "XYLOPHONE": "🎶",
-    "YACHT": "⛵",
-    "ZEBRA": "🦓",
-}
-
-
-def _abc_line_to_token(text: str) -> str:
+def _parse_triplet_line(line: str) -> Dict:
     """
-    Convert a prompt line like:
-      "A is for Apple"
-      "A for Apple"
-      "A - Apple"
-    into:
-      "A|Apple|🍎"
-
-    If parsing fails, fallback to original text.
+    Expected: BIG|WORD|icon.png
+    Example: A|Apple|apple.png
     """
-    s = text.strip()
+    parts = [p.strip() for p in line.split("|")]
+    if len(parts) == 3:
+        big, word, icon = parts
+        icon_path = str(ICONS_DIR / icon)
+        return {"title": big, "subtitle": word, "icon": icon_path}
 
-    # normalize common patterns
-    # We’ll try to split on "is for" first, then "for", then "-"
-    upper = s.upper()
-
-    if " IS FOR " in upper:
-        parts = s.split(" is for ")
-        if len(parts) == 1:
-            parts = s.split(" IS FOR ")
-        if len(parts) >= 2:
-            left = parts[0].strip()
-            right = " is for ".join(parts[1:]).strip()
-            letter = left[:1].upper()
-            word = right.strip()
-            icon = ICON_MAP.get(word.upper(), "")
-            return f"{letter}|{word}|{icon}".rstrip("|")
-
-    if " FOR " in upper:
-        parts = s.split(" for ")
-        if len(parts) == 1:
-            parts = s.split(" FOR ")
-        if len(parts) >= 2:
-            left = parts[0].strip()
-            right = " for ".join(parts[1:]).strip()
-            letter = left[:1].upper()
-            word = right.strip()
-            icon = ICON_MAP.get(word.upper(), "")
-            return f"{letter}|{word}|{icon}".rstrip("|")
-
-    if "-" in s:
-        parts = [p.strip() for p in s.split("-", 1)]
-        if len(parts) == 2 and parts[0] and parts[1]:
-            letter = parts[0][:1].upper()
-            word = parts[1]
-            icon = ICON_MAP.get(word.upper(), "")
-            return f"{letter}|{word}|{icon}".rstrip("|")
-
-    # fallback: if it’s just "A" return "A"
-    if len(s) == 1 and s.isalpha():
-        return s.upper()
-
-    return s
+    # fallback: if old format lines exist
+    return {"title": line, "subtitle": None, "icon": None}
 
 
 def get_templates(target_events: int = 72) -> List[SongTemplate]:
     # ---------- ABC ----------
     abc_lines = _load_prompt_lines("abc_song.txt")
-    abc_units = parse_prompt_lines(abc_lines)
-
-    # Convert prompt text into structured tokens for storyboard
-    abc_tokens_raw = [u["text"] for u in abc_units]
-    abc_tokens_structured = [_abc_line_to_token(t) for t in abc_tokens_raw]
-    abc_tokens = _repeat_to_length(abc_tokens_structured, target_events)
+    abc_units = [_parse_triplet_line(l) for l in abc_lines]
+    abc_tokens = _repeat_to_length(abc_units, target_events)
 
     # ---------- NUMBERS ----------
+    # Keep simple for now: show just the line as title
     num_lines = _load_prompt_lines("numbers_song.txt")
-    num_units = parse_prompt_lines(num_lines)
-    num_tokens = _repeat_to_length([u["text"] for u in num_units], target_events)
+    num_units = [{"title": l, "subtitle": None, "icon": None} for l in num_lines]
+    num_tokens = _repeat_to_length(num_units, target_events)
 
     # ---------- COLORS ----------
     color_lines = _load_prompt_lines("colors_song.txt")
-    color_units = parse_prompt_lines(color_lines)
-    color_tokens = _repeat_to_length([u["text"] for u in color_units], target_events)
+    color_units = [{"title": l, "subtitle": None, "icon": None} for l in color_lines]
+    color_tokens = _repeat_to_length(color_units, target_events)
 
     COLOR_HEX = {
         "RED": "#FF3B30",
@@ -155,28 +78,15 @@ def get_templates(target_events: int = 72) -> List[SongTemplate]:
         "WHITE": "#FFFFFF",
     }
 
-    color_swatches = _repeat_to_length(
-        [COLOR_HEX.get(u["text"], "#000000") for u in color_units],
-        target_events,
-    )
+    # add swatches into the dict tokens
+    for t in color_tokens:
+        sw = COLOR_HEX.get(str(t["title"]).upper(), "#000000")
+        t["swatch_hex"] = sw
 
     return [
-        SongTemplate(
-            key="abc",
-            title="ABC Song (Prompt-Based)",
-            tokens=abc_tokens,
-        ),
-        SongTemplate(
-            key="numbers",
-            title="Numbers Song (Prompt-Based)",
-            tokens=num_tokens,
-        ),
-        SongTemplate(
-            key="colors",
-            title="Colors Song (Prompt-Based)",
-            tokens=color_tokens,
-            token_colors=color_swatches,
-        ),
+        SongTemplate(key="abc", title="ABC Song (Prompt-Based)", tokens=abc_tokens),
+        SongTemplate(key="numbers", title="Numbers Song (Prompt-Based)", tokens=num_tokens),
+        SongTemplate(key="colors", title="Colors Song (Prompt-Based)", tokens=color_tokens),
     ]
 
 

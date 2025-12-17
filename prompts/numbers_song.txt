@@ -2,9 +2,9 @@
 2 Balls
 3 Cats
 4 Dogs
-5 Eggs
+5 Monkeys
 6 Fish
 7 Goats
 8 Hats
-9 Ice Cubes
-10 Kites
+9 Trees
+10 Umbrella
