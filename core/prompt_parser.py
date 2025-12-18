@@ -1,50 +1,48 @@
+# core/prompt_parser.py
 from __future__ import annotations
-
-import re
 from typing import List, Dict
-
-
-_IS_FOR_RE = re.compile(r"^\s*(.+?)\s+is\s+for\s+(.+?)\s*$", re.IGNORECASE)
-
 
 def parse_prompt_lines(lines: List[str]) -> List[Dict[str, str]]:
     """
-    Turn lines into units.
-    Supports:
-      - "A is for Apple"
-      - "3 apples"
-      - "RED"
-      - fallback: any text line
+    Accepts:
+      - "A|Apple|a.png"
+      - "A is for Apple|a.png" (fallback)
+      - "A" (fallback)
 
     Returns list of dicts:
-      { "big": "...", "small": "...", "noun": "..." }
+      { "letter": "A", "word": "Apple", "icon": "a.png", "text": "A is for Apple" }
     """
     out: List[Dict[str, str]] = []
 
     for raw in lines:
-        s = (raw or "").strip()
-        if not s:
+        line = raw.strip()
+        if not line:
             continue
 
-        m = _IS_FOR_RE.match(s)
-        if m:
-            big = m.group(1).strip()
-            small = m.group(2).strip()
-            # noun is usually the small word’s first token
-            noun = small.split()[0] if small else ""
-            out.append({"big": big, "small": small, "noun": noun})
+        # Preferred: A|Apple|a.png
+        if "|" in line:
+            parts = [p.strip() for p in line.split("|")]
+            letter = parts[0] if len(parts) > 0 else ""
+            word = parts[1] if len(parts) > 1 else ""
+            icon = parts[2] if len(parts) > 2 else ""
+            text = f"{letter} is for {word}".strip()
+            out.append({"letter": letter, "word": word, "icon": icon, "text": text})
             continue
 
-        # "3 apples" style
-        parts = s.split()
-        if len(parts) >= 2 and parts[0].isdigit():
-            big = parts[0]
-            small = " ".join(parts[1:])
-            noun = parts[1]
-            out.append({"big": big, "small": small, "noun": noun})
+        # Fallback: "A is for Apple|a.png"
+        if "|" in line:
+            left, right = line.split("|", 1)
+            text = left.strip()
+            icon = right.strip()
+            # try to extract letter/word naïvely
+            # e.g. "A is for Apple"
+            letter = text[:1].strip()
+            word = text.split()[-1].strip() if text.split() else ""
+            out.append({"letter": letter, "word": word, "icon": icon, "text": text})
             continue
 
-        # "RED" style (color)
-        out.append({"big": s, "small": "", "noun": s})
+        # Minimal fallback: "A"
+        letter = line[:1].strip()
+        out.append({"letter": letter, "word": "", "icon": "", "text": letter})
 
     return out

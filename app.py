@@ -1,55 +1,37 @@
+# app.py
 import sys
 import uuid
-import traceback
 from pathlib import Path
-
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.songs import get_templates, get_template_by_key
+from core.songs import get_template_by_key
 from core.storyboard import build_storyboard_for_template
 from core.render import render_video_ffmpeg_drawtext
-
-import core.render as cr
-
-st.write("RENDER FILE:", cr.__file__)
-st.write("RENDER FUNC:", cr.render_video_ffmpeg_drawtext.__code__.co_filename)
 
 BASE_DIR = ROOT
 OUTPUTS_DIR = BASE_DIR / "outputs"
 OUTPUTS_DIR.mkdir(exist_ok=True, parents=True)
 
-DURATION_SEC = 15
-TARGET_EVENTS = 6
+# CLIENT ASK: 1 minute, one song only
+DURATION_SEC = 60
+TARGET_EVENTS = 24  # 60sec / 24 = 2.5 sec per card
 
-st.set_page_config(page_title="Lothgha Visual-AI POC", layout="centered")
-
+st.set_page_config(page_title="ABC Visual POC", layout="centered")
 
 def main():
-    st.title("Lothgha Visual-AI POC (3 Demo Songs)")
-    st.write(
-        "Upload an audio clip for your demo. The app will loop it to 3 minutes and generate "
-        "a synchronized educational video using one of three built-in song templates:\n"
-        "- ABCs\n- Numbers\n- Colors"
-    )
-
-    templates = get_templates(target_events=TARGET_EVENTS)
-    template_labels = {t.title: t.key for t in templates}
+    st.title("ABC Visual POC (A is for Apple)")
+    st.write("Upload audio. We loop it to **1 minute** and render the ABC visuals.")
 
     audio_file = st.file_uploader(
-        "Upload audio (WAV/MP3/M4A). For POC you can upload a short clip; it will loop to 3 minutes.",
+        "Upload audio (WAV/MP3/M4A).",
         type=["wav", "mp3", "m4a"],
     )
 
-    choice_title = st.selectbox("Choose a demo song template", options=list(template_labels.keys()))
-    choice_key = template_labels[choice_title]
-
-    make_all = st.checkbox("Generate ALL 3 demo videos (ABC + Numbers + Colors)", value=False)
-
-    if st.button("Generate video"):
+    if st.button("Generate ABC video"):
         if not audio_file:
             st.error("Please upload an audio file first.")
             return
@@ -58,56 +40,44 @@ def main():
         audio_path = OUTPUTS_DIR / f"audio_{uuid.uuid4().hex}{suffix}"
         audio_path.write_bytes(audio_file.getbuffer())
 
-        st.write("Saved audio path:", str(audio_path))
-        st.write("Exists:", audio_path.exists())
+        template = get_template_by_key("abc", target_events=TARGET_EVENTS)
 
-        keys = ["abc", "numbers", "colors"] if make_all else [choice_key]
-
-        for k in keys:
-            template = get_template_by_key(k, target_events=TARGET_EVENTS)
-
-            with st.spinner(f"Building storyboard for {template.title}..."):
-                events = build_storyboard_for_template(
-                    tokens=template.tokens,
-                    duration_sec=DURATION_SEC
-                )
-
-            with st.spinner(f"Rendering {template.title} (3 minutes)..."):
-                out_name = f"{k}_demo_{uuid.uuid4().hex[:8]}.mp4"
-                out_path = OUTPUTS_DIR / out_name
-
-                try:
-                    final_path = render_video_ffmpeg_drawtext(
-                        audio_path=str(audio_path),
-                        events=events,
-                        output_path=str(out_path),
-                        duration_sec=DURATION_SEC,
-                        resolution=(26, 40),
-                        fps=12,
-                    )
-                except Exception as e:
-                    st.error("Render failed ❌")
-                    st.text_area("Full error (copy this)", str(e), height=350)
-                    st.stop()
-
-                    # No syntax highlighter → avoids StreamlitSyntaxHighlighter JS crash
-                    st.text_area("Exception message", str(e), height=160)
-                    st.text_area("Full traceback", traceback.format_exc(), height=360)
-
-                    st.stop()
-
-            st.success(f"Generated: {template.title}")
-            video_bytes = Path(final_path).read_bytes()
-            st.video(video_bytes)
-            st.download_button(
-                label=f"Download {template.title}",
-                data=video_bytes,
-                file_name=out_name,
-                mime="video/mp4",
+        with st.spinner("Building storyboard..."):
+            events = build_storyboard_for_template(
+                tokens=template.tokens,
+                duration_sec=DURATION_SEC,
+                token_words=template.token_words,
+                token_icons=template.token_icons,
             )
 
-    st.caption("POC: template-driven (ABC, Numbers, Colors), 3 minutes each, ffmpeg-only rendering for reliability.")
+        with st.spinner("Rendering (ffmpeg)..."):
+            out_name = f"abc_demo_{uuid.uuid4().hex[:8]}.mp4"
+            out_path = OUTPUTS_DIR / out_name
 
+            try:
+                final_path = render_video_ffmpeg_drawtext(
+                    audio_path=str(audio_path),
+                    events=events,
+                    output_path=str(out_path),
+                    duration_sec=DURATION_SEC,
+                    resolution=(854, 480),  # faster for Streamlit Cloud
+                    fps=24,
+                )
+            except Exception as e:
+                st.error(str(e))
+                return
+
+        st.success("Generated ABC video")
+        video_bytes = Path(final_path).read_bytes()
+        st.video(video_bytes)
+        st.download_button(
+            label="Download ABC video",
+            data=video_bytes,
+            file_name=out_name,
+            mime="video/mp4",
+        )
+
+    st.caption("Put PNGs in assets/icons and use prompts/abc_song.txt lines like: A|Apple|a.png")
 
 if __name__ == "__main__":
     main()
