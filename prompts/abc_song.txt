@@ -1,26 +1,26 @@
-A|Apple|a.png
-B|Ball|b.png
-C|Cat|c.png
-D|Dog|d.png
-E|Elephant|e.png
-F|Fish|f.png
-G|Goat|g.png
-H|Hat|h.png
-I|Igloo|i.png
-J|Juice|j.png
-K|Kangaroo|k.png
-L|Lion|l.png
-M|Monkey|m.png
-N|Nose|n.png
-O|Octopus|o.png
-P|Pig|p.png
-Q|Queen|q.png
-R|Rabbit|r.png
-S|Sun|s.png
-T|Tree|t.png
-U|Umbrella|u.png
-V|Violin|v.png
-W|Whale|w.png
-X|Xylophone|x.png
-Y|Yacht|y.png
-Z|Zebra|z.png
+A is for Apple
+B is for Ball
+C is for Cat
+D is for Dog
+E is for Elephant
+F is for Fish
+G is for Goat
+H is for Hat
+I is for Igloo
+J is for Jar
+K is for Kangaroo
+L is for Lion
+M is for Monkey
+N is for Nose
+O is for Orange
+P is for Pig
+Q is for Queen
+R is for Rabbit
+S is for Sun
+T is for Tree
+U is for Umbrella
+V is for Violin
+W is for Whale
+X is for Xylophone
+Y is for Yacht
+Z is for Zebra

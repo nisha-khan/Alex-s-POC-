@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Dict
+
+from core.prompt_parser import parse_prompt_lines
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMPTS_DIR = ROOT / "prompts"
@@ -12,11 +15,10 @@ ICONS_DIR = ROOT / "assets" / "icons"
 class SongTemplate:
     key: str
     title: str
-    tokens: List[Dict]
-    token_colors: Optional[List[str]] = None
+    tokens: List[Dict[str, Optional[str]]]  # list of {big, small, icon, swatch}
 
 
-def _repeat_to_length(base: List[Dict], target_len: int) -> List[Dict]:
+def _repeat_to_length(base: List[Dict[str, Optional[str]]], target_len: int) -> List[Dict[str, Optional[str]]]:
     if not base or target_len <= 0:
         return []
     out = []
@@ -31,40 +33,65 @@ def _load_prompt_lines(filename: str) -> List[str]:
     path = PROMPTS_DIR / filename
     if not path.exists():
         raise FileNotFoundError(f"Missing prompt file: {path}")
-    return [l.strip() for l in path.read_text().splitlines() if l.strip()]
+    return [l.strip() for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
-def _parse_triplet_line(line: str) -> Dict:
+def _icon_for_unit(unit: Dict[str, str]) -> Optional[str]:
     """
-    Expected: BIG|WORD|icon.png
-    Example: A|Apple|apple.png
+    Choose icon based on:
+      - first character of 'big' if it's a letter (A/B/C)
+      - otherwise first character of noun
+    icons are stored as assets/icons/a.png etc.
     """
-    parts = [p.strip() for p in line.split("|")]
-    if len(parts) == 3:
-        big, word, icon = parts
-        icon_path = str(ICONS_DIR / icon)
-        return {"title": big, "subtitle": word, "icon": icon_path}
+    big = (unit.get("big") or "").strip()
+    noun = (unit.get("noun") or "").strip()
 
-    # fallback: if old format lines exist
-    return {"title": line, "subtitle": None, "icon": None}
+    key = ""
+    if big and big[0].isalpha():
+        key = big[0].lower()
+    elif noun and noun[0].isalpha():
+        key = noun[0].lower()
+    else:
+        return None
+
+    p = ICONS_DIR / f"{key}.png"
+    return str(p) if p.exists() else None
 
 
 def get_templates(target_events: int = 72) -> List[SongTemplate]:
     # ---------- ABC ----------
     abc_lines = _load_prompt_lines("abc_song.txt")
-    abc_units = [_parse_triplet_line(l) for l in abc_lines]
-    abc_tokens = _repeat_to_length(abc_units, target_events)
+    abc_units = parse_prompt_lines(abc_lines)
+    abc_base = []
+    for u in abc_units:
+        abc_base.append(
+            {
+                "big": u["big"],
+                "small": u["small"],
+                "icon": _icon_for_unit(u),
+                "swatch": None,
+            }
+        )
+    abc_tokens = _repeat_to_length(abc_base, target_events)
 
     # ---------- NUMBERS ----------
-    # Keep simple for now: show just the line as title
     num_lines = _load_prompt_lines("numbers_song.txt")
-    num_units = [{"title": l, "subtitle": None, "icon": None} for l in num_lines]
-    num_tokens = _repeat_to_length(num_units, target_events)
+    num_units = parse_prompt_lines(num_lines)
+    num_base = []
+    for u in num_units:
+        num_base.append(
+            {
+                "big": u["big"],
+                "small": u["small"],
+                "icon": _icon_for_unit(u),  # optional; based on noun’s first letter
+                "swatch": None,
+            }
+        )
+    num_tokens = _repeat_to_length(num_base, target_events)
 
     # ---------- COLORS ----------
     color_lines = _load_prompt_lines("colors_song.txt")
-    color_units = [{"title": l, "subtitle": None, "icon": None} for l in color_lines]
-    color_tokens = _repeat_to_length(color_units, target_events)
+    color_units = parse_prompt_lines(color_lines)
 
     COLOR_HEX = {
         "RED": "#FF3B30",
@@ -78,10 +105,19 @@ def get_templates(target_events: int = 72) -> List[SongTemplate]:
         "WHITE": "#FFFFFF",
     }
 
-    # add swatches into the dict tokens
-    for t in color_tokens:
-        sw = COLOR_HEX.get(str(t["title"]).upper(), "#000000")
-        t["swatch_hex"] = sw
+    color_base = []
+    for u in color_units:
+        big = (u["big"] or "").upper()
+        sw = COLOR_HEX.get(big, "#000000")
+        color_base.append(
+            {
+                "big": big,
+                "small": "",      # keep clean for colors
+                "icon": None,     # swatch is the visual
+                "swatch": sw,
+            }
+        )
+    color_tokens = _repeat_to_length(color_base, target_events)
 
     return [
         SongTemplate(key="abc", title="ABC Song (Prompt-Based)", tokens=abc_tokens),
