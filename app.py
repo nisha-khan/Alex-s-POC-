@@ -22,8 +22,8 @@ BASE_DIR = ROOT
 OUTPUTS_DIR = BASE_DIR / "outputs"
 OUTPUTS_DIR.mkdir(exist_ok=True, parents=True)
 
-DURATION_SEC = 180
-TARGET_EVENTS = 72
+DURATION_SEC = 15
+TARGET_EVENTS = 
 
 st.set_page_config(page_title="Lothgha Visual-AI POC", layout="centered")
 
@@ -82,8 +82,8 @@ def main():
                         events=events,
                         output_path=str(out_path),
                         duration_sec=DURATION_SEC,
-                        resolution=(1280, 720),
-                        fps=30,
+                        resolution=(854, 480),
+                        fps=24,
                     )
                 except Exception as e:
                     st.error("Render failed ❌")
