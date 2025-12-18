@@ -120,7 +120,7 @@ def render_video_ffmpeg_drawtext(
                     out_label = f"[v{i}_o]"
                     filter_parts.append(
                         f"{next_label}{ic_label}"
-                        f"overlay=x=(w-overlay_w)/2:y={icon_y}:enable='{enable}'"
+                        f"overlay=x=(w-overlay_w)/2:y=(h-overlay_h)/2:enable='{enable}'"
                         f"{out_label};"
                     )
                     current = out_label
