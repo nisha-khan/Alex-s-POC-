@@ -8,28 +8,32 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.songs import get_template_by_key
-from core.storyboard import build_storyboard_for_template
-from core.render import render_video_ffmpeg_drawtext
+from core.prompt_parser import parse_prompt_lines
+from core.storyboard import build_storyboard_from_units
+from core.render import render_video_ffmpeg
 
-BASE_DIR = ROOT
-OUTPUTS_DIR = BASE_DIR / "outputs"
+OUTPUTS_DIR = ROOT / "outputs"
 OUTPUTS_DIR.mkdir(exist_ok=True, parents=True)
 
-# CLIENT ASK: 1 minute, one song only
+PROMPTS_DIR = ROOT / "prompts"
+ABC_PROMPT_FILE = PROMPTS_DIR / "abc_song.txt"
+
 DURATION_SEC = 60
-TARGET_EVENTS = 24  # 60sec / 24 = 2.5 sec per card
 
 st.set_page_config(page_title="ABC Visual POC", layout="centered")
 
-def main():
-    st.title("ABC Visual POC (A is for Apple)")
-    st.write("Upload audio. We loop it to **1 minute** and render the ABC visuals.")
 
-    audio_file = st.file_uploader(
-        "Upload audio (WAV/MP3/M4A).",
-        type=["wav", "mp3", "m4a"],
-    )
+def load_lines(p: Path) -> list[str]:
+    if not p.exists():
+        raise FileNotFoundError(f"Missing prompt file: {p}")
+    return [l.strip() for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
+
+
+def main():
+    st.title("ABC Visual POC (Timestamp Aligned)")
+    st.write("Uses **prompts/abc_song.txt timestamps** to align visuals to the song (1 minute).")
+
+    audio_file = st.file_uploader("Upload audio (WAV/MP3/M4A).", type=["wav", "mp3", "m4a"])
 
     if st.button("Generate ABC video"):
         if not audio_file:
@@ -40,44 +44,36 @@ def main():
         audio_path = OUTPUTS_DIR / f"audio_{uuid.uuid4().hex}{suffix}"
         audio_path.write_bytes(audio_file.getbuffer())
 
-        template = get_template_by_key("abc", target_events=TARGET_EVENTS)
+        try:
+            lines = load_lines(ABC_PROMPT_FILE)
+            units = parse_prompt_lines(lines)  # expects timestamped lines
+            events = build_storyboard_from_units(units, duration_sec=DURATION_SEC)
+        except Exception as e:
+            st.error(f"Prompt/storyboard error: {e}")
+            return
 
-        with st.spinner("Building storyboard..."):
-            events = build_storyboard_for_template(
-                tokens=template.tokens,
+        out_name = f"abc_demo_{uuid.uuid4().hex[:8]}.mp4"
+        out_path = OUTPUTS_DIR / out_name
+
+        try:
+            final_path = render_video_ffmpeg(
+                audio_path=str(audio_path),
+                events=events,
+                output_path=str(out_path),
                 duration_sec=DURATION_SEC,
-                token_words=template.token_words,
-                token_icons=template.token_icons,
+                resolution=(854, 480),
+                fps=15,
             )
-
-        with st.spinner("Rendering (ffmpeg)..."):
-            out_name = f"abc_demo_{uuid.uuid4().hex[:8]}.mp4"
-            out_path = OUTPUTS_DIR / out_name
-
-            try:
-                final_path = render_video_ffmpeg_drawtext(
-                    audio_path=str(audio_path),
-                    events=events,
-                    output_path=str(out_path),
-                    duration_sec=DURATION_SEC,
-                    resolution=(854, 480),  # faster for Streamlit Cloud
-                    fps=24,
-                )
-            except Exception as e:
-                st.error(str(e))
-                return
+        except Exception as e:
+            st.error(str(e))
+            return
 
         st.success("Generated ABC video")
         video_bytes = Path(final_path).read_bytes()
         st.video(video_bytes)
-        st.download_button(
-            label="Download ABC video",
-            data=video_bytes,
-            file_name=out_name,
-            mime="video/mp4",
-        )
+        st.download_button("Download ABC video", data=video_bytes, file_name=out_name, mime="video/mp4")
 
-    st.caption("Put PNGs in assets/icons and use prompts/abc_song.txt lines like: A|Apple|a.png")
+    st.caption("Format for prompts/abc_song.txt: MM:SS.xx|A|Apple|a.png  (icon must exist in assets/icons/)")
 
 if __name__ == "__main__":
     main()
