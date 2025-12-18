@@ -82,8 +82,8 @@ def main():
                         events=events,
                         output_path=str(out_path),
                         duration_sec=DURATION_SEC,
-                        resolution=(854, 480),
-                        fps=24,
+                        resolution=(426, 240),
+                        fps=12,
                     )
                 except Exception as e:
                     st.error("Render failed ❌")

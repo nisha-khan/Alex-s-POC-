@@ -146,10 +146,10 @@ def render_video_ffmpeg_drawtext(
         "-r", str(fps),
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-crf", "32",
-        "-tune", "zerolatency",
+        "-crf", "35",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
+        "-b:a", "64k",
         "-shortest",
         str(out),
     ]
