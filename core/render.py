@@ -88,7 +88,7 @@ def render_video_ffmpeg_drawtext(
         # 1) draw card + text onto current -> [t{i}]
         chain = (
             f"{current}"
-            f"drawbox=x=w*0.12:y=h*0.14:w=w*0.76:h=h*0.72:"
+            f"drawbox=x=iw*0.12:y=ih*0.14:w=iw*0.76:h=ih*0.72:"
             f"color=black@0.30:t=fill:enable='{enable}',"
             f"drawtext={_font_arg()}:fontsize=h*0.22:fontcolor=white:"
             f"x=(w-text_w)/2:y=h*0.22:text='{letter}':enable='{enable}'"
