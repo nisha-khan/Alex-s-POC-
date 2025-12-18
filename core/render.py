@@ -107,23 +107,23 @@ def render_video_ffmpeg_drawtext(
 
         # Optional icon overlay
         if e.icon:
-            p = (ICONS_DIR / e.icon).resolve()
-            if p.exists():
-                idx = icon_input_idx.get(str(p))
+            p_icon = (ICONS_DIR / e.icon).resolve()
+            if p_icon.exists():
+                idx = icon_input_idx.get(str(p_icon))
                 if idx is not None:
-                    ic_label = f"[ic{i}]"
-                    # scale icon stream then overlay
-                    chain = chain.rstrip(",")
-                    chain += f"{next_label}tmp{i};"
-                    # Above line makes a label we can overlay onto:
-                    # But easiest is: do texts into tmp label, then overlay onto it.
+                    chain = chain.rstrip(",") + f"{next_label};"
                     filter_parts.append(chain)
 
+                    ic_label = f"[ic{i}]"
+                    filter_parts.append(f"[{idx}:v]scale=-1:{icon_h}{ic_label};")
+
+                    out_label = f"[v{i}_o]"
                     filter_parts.append(
-                        f"[{idx}:v]scale=-1:{icon_h}{ic_label};"
-                        f"[tmp{i}]{ic_label}overlay=x=(w-overlay_w)/2:y={icon_y}:enable='{enable}'{next_label};"
+                        f"{next_label}{ic_label}"
+                        f"overlay=x=(w-overlay_w)/2:y={icon_y}:enable='{enable}'"
+                        f"{out_label};"
                     )
-                    current = next_label
+                    current = out_label
                     continue
 
         # no icon case: just close
