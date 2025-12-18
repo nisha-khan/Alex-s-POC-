@@ -82,7 +82,7 @@ def main():
                         events=events,
                         output_path=str(out_path),
                         duration_sec=DURATION_SEC,
-                        resolution=(426, 240),
+                        resolution=(26, 40),
                         fps=12,
                     )
                 except Exception as e:
