@@ -1,72 +1,77 @@
-# core/prompt_parser.py
 from __future__ import annotations
-from typing import List, Dict
+from typing import List, Dict, Optional
+import re
 
 
-def _ts_to_seconds(ts: str) -> float:
+def ts_to_seconds(ts: str) -> float:
     """
     Accepts:
       - "MM:SS"
       - "MM:SS.xx"
       - "HH:MM:SS"
       - "HH:MM:SS.xx"
+      - also your format "00:00.01" (MM:SS.xx)
     """
     ts = ts.strip()
+    if not ts:
+        return 0.0
+
     parts = ts.split(":")
+    if len(parts) == 1:
+        # "SS" or "SS.xx"
+        return float(parts[0])
+
     if len(parts) == 2:
         m = int(parts[0])
         s = float(parts[1])
         return m * 60 + s
-    if len(parts) == 3:
-        h = int(parts[0])
-        m = int(parts[1])
-        s = float(parts[2])
-        return h * 3600 + m * 60 + s
-    # fallback
-    return float(ts)
+
+    # len == 3
+    h = int(parts[0])
+    m = int(parts[1])
+    s = float(parts[2])
+    return h * 3600 + m * 60 + s
 
 
-def parse_prompt_lines(lines: List[str]) -> List[Dict[str, object]]:
+_TS_PREFIX = re.compile(r"^\s*(\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?)\s*\|\s*(.*)$")
+
+
+def parse_prompt_lines(lines: List[str]) -> List[Dict]:
     """
-    Preferred (timestamped):
-      "00:00.01|A|Apple|a.png"
+    Supported line formats:
 
-    Also supports (no timestamp):
-      "A|Apple|a.png"
-      "A is for Apple|a.png" (fallback)
-      "A" (fallback)
+    A) Timestamped (recommended):
+       00:00.01|A|Apple|a.png
+       00:02.50|B|Ball|b.png
 
-    Returns list of dicts:
-      { "t": float, "letter": str, "word": str, "icon": str }
+    B) Non-timestamped:
+       A|Apple|a.png
+
+    Returns list of units:
+      {"t": float_seconds_or_None, "letter": str, "word": str, "icon": str}
     """
-    out: List[Dict[str, object]] = []
+    out: List[Dict] = []
 
     for raw in lines:
-        line = raw.strip()
+        line = (raw or "").strip()
         if not line:
             continue
 
-        if "|" in line:
+        t: Optional[float] = None
+
+        m = _TS_PREFIX.match(line)
+        if m:
+            ts = m.group(1)
+            rest = m.group(2)
+            t = ts_to_seconds(ts)
+            parts = [p.strip() for p in rest.split("|")]
+        else:
             parts = [p.strip() for p in line.split("|")]
 
-            # Timestamped format: t|letter|word|icon
-            if len(parts) >= 4 and (":" in parts[0] or parts[0].replace(".", "", 1).isdigit()):
-                t = _ts_to_seconds(parts[0])
-                letter = parts[1]
-                word = parts[2]
-                icon = parts[3]
-                out.append({"t": t, "letter": letter, "word": word, "icon": icon})
-                continue
+        letter = parts[0] if len(parts) > 0 else ""
+        word = parts[1] if len(parts) > 1 else ""
+        icon = parts[2] if len(parts) > 2 else ""
 
-            # Non-timestamp: letter|word|icon
-            letter = parts[0] if len(parts) > 0 else ""
-            word = parts[1] if len(parts) > 1 else ""
-            icon = parts[2] if len(parts) > 2 else ""
-            out.append({"t": 0.0, "letter": letter, "word": word, "icon": icon})
-            continue
-
-        # Minimal fallback: "A"
-        letter = line[:1].strip()
-        out.append({"t": 0.0, "letter": letter, "word": "", "icon": ""})
+        out.append({"t": t, "letter": letter, "word": word, "icon": icon})
 
     return out

@@ -1,4 +1,3 @@
-# core/render.py
 from __future__ import annotations
 
 import subprocess
@@ -11,24 +10,16 @@ ROOT = Path(__file__).resolve().parents[1]
 ICONS_DIR = ROOT / "assets" / "icons"
 
 FONT_LINUX = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FONT_WIN_FALLBACK = "C:/Windows/Fonts/arialbd.ttf"
 
 
 def _escape_text(s: str) -> str:
+    # Safe for ffmpeg drawtext
     return (
         (s or "")
         .replace("\\", "\\\\")
         .replace(":", "\\:")
         .replace("'", "\\'")
     )
-
-
-def _font_arg() -> str:
-    # Prefer fontfile (more reliable on Streamlit Cloud)
-    if Path(FONT_LINUX).exists():
-        return f"fontfile='{FONT_LINUX}'"
-    # Windows fallback (note: ffmpeg drawtext is picky on Windows paths)
-    return f"fontfile='{FONT_WIN_FALLBACK}'"
 
 
 def render_video_ffmpeg_drawtext(
@@ -43,90 +34,102 @@ def render_video_ffmpeg_drawtext(
     out.parent.mkdir(parents=True, exist_ok=True)
 
     w, h = resolution
-    icon_h = max(32, int(h * 0.20))  # icon height in pixels
 
-    # Collect unique icon files that actually exist
-    icon_files_unique: List[Path] = []
-    seen = set()
+    # ---- pixel constants (NO expressions like w*0.12 on Streamlit Cloud) ----
+    card_x = int(w * 0.12)
+    card_y = int(h * 0.14)
+    card_w = int(w * 0.76)
+    card_h = int(h * 0.72)
+
+    big_fs = int(h * 0.22)
+    word_fs = int(h * 0.10)
+
+    big_y = int(h * 0.22)
+    word_y = int(h * 0.50)
+
+    icon_h = int(h * 0.20)
+    icon_y = int(h * 0.62)
+
+    # Collect icons used
+    icon_paths: List[Path] = []
     for e in events:
-        if not getattr(e, "icon", None):
-            continue
-        p = (ICONS_DIR / e.icon).resolve()
-        if p.exists() and str(p) not in seen:
-            seen.add(str(p))
-            icon_files_unique.append(p)
+        if e.icon:
+            p = (ICONS_DIR / e.icon).resolve()
+            if p.exists():
+                icon_paths.append(p)
 
-    # ffmpeg inputs: audio (0), then each icon image (1..n)
+    # unique preserve order
+    seen = set()
+    icon_paths_unique: List[Path] = []
+    for p in icon_paths:
+        if str(p) not in seen:
+            seen.add(str(p))
+            icon_paths_unique.append(p)
+
+    # ffmpeg inputs (audio + icons as looped images)
     cmd = [
         "ffmpeg", "-y",
         "-hide_banner", "-loglevel", "error",
         "-stream_loop", "-1", "-i", audio_path,
     ]
-
-    for p in icon_files_unique:
+    for p in icon_paths_unique:
         cmd += ["-loop", "1", "-i", str(p)]
 
-    # map icon path -> input index
-    icon_input_map = {str(p): idx + 1 for idx, p in enumerate(icon_files_unique)}
-
-    filter_parts: List[str] = []
-    filter_parts.append(f"color=c=#E6F5FF:s={w}x{h}:r={fps}:d={duration_sec}[bg];")
-
+    # background
+    filter_parts = [f"color=c=#E6F5FF:s={w}x{h}:r={fps}:d={duration_sec}[bg];"]
     current = "[bg]"
+
+    icon_input_idx = {str(p): i + 1 for i, p in enumerate(icon_paths_unique)}  # audio=0, icons start=1
 
     for i, e in enumerate(events):
         start = max(0.0, float(e.t_start))
         end = min(float(duration_sec), float(e.t_end))
+        if end <= start:
+            continue
+
         enable = f"between(t\\,{start:.3f}\\,{end:.3f})"
+        next_label = f"[v{i}]"
 
-        letter = _escape_text(getattr(e, "letter", ""))
-        word = _escape_text(getattr(e, "word", ""))
+        letter = _escape_text(e.letter)
+        word = _escape_text(e.word)
 
-        text_label = f"[t{i}]"
-        out_label = f"[v{i}]"
-
-        # 1) draw card + text onto current -> [t{i}]
+        # Base card + texts
         chain = (
             f"{current}"
-            f"drawbox=x=iw*0.12:y=ih*0.14:w=iw*0.76:h=ih*0.72:"
-            f"color=black@0.30:t=fill:enable='{enable}',"
-            f"drawtext={_font_arg()}:fontsize=h*0.22:fontcolor=white:"
-            f"x=(w-text_w)/2:y=h*0.22:text='{letter}':enable='{enable}'"
+            f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color=black@0.30:t=fill:enable='{enable}',"
+            f"drawtext=fontfile='{FONT_LINUX}':fontsize={big_fs}:fontcolor=white:x=(w-text_w)/2:y={big_y}:text='{letter}':enable='{enable}',"
         )
 
         if word:
             chain += (
-                f",drawtext={_font_arg()}:fontsize=h*0.10:fontcolor=white:"
-                f"x=(w-text_w)/2:y=h*0.50:text='{word}':enable='{enable}'"
+                f"drawtext=fontfile='{FONT_LINUX}':fontsize={word_fs}:fontcolor=white:x=(w-text_w)/2:y={word_y}:text='{word}':enable='{enable}',"
             )
 
-        chain += f"{text_label};"
+        # Optional icon overlay
+        if e.icon:
+            p = (ICONS_DIR / e.icon).resolve()
+            if p.exists():
+                idx = icon_input_idx.get(str(p))
+                if idx is not None:
+                    ic_label = f"[ic{i}]"
+                    # scale icon stream then overlay
+                    chain = chain.rstrip(",")
+                    chain += f"{next_label}tmp{i};"
+                    # Above line makes a label we can overlay onto:
+                    # But easiest is: do texts into tmp label, then overlay onto it.
+                    filter_parts.append(chain)
+
+                    filter_parts.append(
+                        f"[{idx}:v]scale=-1:{icon_h}{ic_label};"
+                        f"[tmp{i}]{ic_label}overlay=x=(w-overlay_w)/2:y={icon_y}:enable='{enable}'{next_label};"
+                    )
+                    current = next_label
+                    continue
+
+        # no icon case: just close
+        chain = chain.rstrip(",") + f"{next_label};"
         filter_parts.append(chain)
-
-        # 2) if icon exists -> scale icon -> overlay on [t{i}] -> [v{i}]
-        icon_name = getattr(e, "icon", None)
-        if icon_name:
-            icon_path = (ICONS_DIR / icon_name).resolve()
-            idx = icon_input_map.get(str(icon_path))
-
-            if idx is not None:
-                icon_scaled = f"[ic{i}]"
-                # scale icon to fixed pixel height (safe)
-                filter_parts.append(f"[{idx}:v]scale=-1:{icon_h}{icon_scaled};")
-
-                # overlay onto text_label -> out_label
-                filter_parts.append(
-                    f"{text_label}{icon_scaled}"
-                    f"overlay=x=(main_w-overlay_w)/2:y=main_h*0.62:"
-                    f"enable='{enable}'"
-                    f"{out_label};"
-                )
-                current = out_label
-                continue
-
-        # 3) no icon -> just pass text_label forward as out_label
-        filter_parts.append(f"{text_label}copy{out_label};")
-        current = out_label
+        current = next_label
 
     filter_complex = "".join(filter_parts).rstrip(";")
 
@@ -145,10 +148,6 @@ def render_video_ffmpeg_drawtext(
 
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if p.returncode != 0:
-        raise RuntimeError(
-            "FFMPEG FAILED\n\n"
-            f"Return code: {p.returncode}\n\n"
-            f"STDERR:\n{p.stderr}\n"
-        )
+        raise RuntimeError(f"FFMPEG FAILED\n\nReturn code: {p.returncode}\n\nSTDERR:\n{p.stderr}\n")
 
     return str(out)
