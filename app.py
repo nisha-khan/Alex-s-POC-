@@ -23,7 +23,7 @@ OUTPUTS_DIR = BASE_DIR / "outputs"
 OUTPUTS_DIR.mkdir(exist_ok=True, parents=True)
 
 DURATION_SEC = 15
-TARGET_EVENTS = 
+TARGET_EVENTS = 6
 
 st.set_page_config(page_title="Lothgha Visual-AI POC", layout="centered")
 
